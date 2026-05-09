@@ -7,6 +7,10 @@ Prompt Engineering -> Context Engineering -> Harness Engineering
 
 npx ccusage@latest 查token用量
 
+## All in One
+
+https://github.com/affaan-m/everything-claude-code
+
 ## Skills集合
 
 - https://skills.sh/
@@ -62,3 +66,8 @@ https://huggingface.co/blog/custom-cuda-kernels-agent-skills
 deepwiki
 
 ## PDF, Pptx, Docx
+
+## 画图
+
+- d2
+- mermaid
