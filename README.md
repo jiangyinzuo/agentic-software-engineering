@@ -67,6 +67,9 @@ deepwiki
 
 ## PDF, Pptx, Docx
 
+- https://github.com/jiangyinzuo/skills_leaks
+- https://github.com/anthropics/skills skills/skill-creator skills/pdf skills/pptx skills/docx
+
 ## 画图
 
 - d2
