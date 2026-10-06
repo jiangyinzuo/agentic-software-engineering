@@ -1,6 +1,6 @@
 ---
 name: wezterm-cli-control
-description: Control Windows WezTerm from WSL with `wezterm.exe cli`: inspect windows, tabs, panes, and text; send shell commands or TUI keystrokes; spawn tabs; and verify results. Use whenever the user asks to operate a WezTerm tab or pane, automate terminal input, read pane output, or control a tmux/SSH session through WezTerm.
+description: "Control Windows WezTerm from WSL with `wezterm.exe cli`: inspect windows, tabs, panes, and text; send shell commands or TUI keystrokes; spawn tabs; and verify results. Use whenever the user asks to operate a WezTerm tab or pane, automate terminal input, read pane output, or control a tmux/SSH session through WezTerm."
 ---
 
 # WezTerm CLI control from WSL
