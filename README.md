@@ -1,9 +1,6 @@
-# Agent Harness
+# Agentic Software Engineering
 
-Prompt Engineering -> Context Engineering -> Harness Engineering
-
-- 常用code agent: claude code, codex, gemini-cli, opencode
-- 技能在不同agent harness中切换可能存在工具名不一致的问题，需要做映射。
+- Skill在不同agent harness中切换可能存在工具名不一致的问题，需要做映射。
 
 npx ccusage@latest 查token用量
 
