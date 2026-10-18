@@ -1,97 +1,77 @@
 ---
 name: wezterm-cli-control
-description: "Control Windows WezTerm from WSL with `wezterm.exe cli`: inspect windows, tabs, panes, and text; send shell commands or TUI keystrokes; spawn tabs; and verify results. Use whenever the user asks to operate a WezTerm tab or pane, automate terminal input, read pane output, or control a tmux/SSH session through WezTerm."
+description: "Operate WezTerm panes from WSL: inspect terminal state, send text or keys, manage tabs, and verify commands in shells, SSH, tmux, and TUIs."
 ---
 
-# WezTerm CLI control from WSL
+# WezTerm CLI control
 
-Use `wezterm.exe cli` as the pane-control API. Target a verified `pane_id`, not a guessed tab number, and read the pane after state changes.
+Select the pane → read its state → send appropriate input → verify the result.
 
-## Start and target
-
-Confirm the executable and inspect topology:
+## Target and inspect
 
 ```bash
-command -v wezterm.exe
-wezterm.exe --version
 wezterm.exe cli list --format json
-```
-
-Use stable evidence such as `tab_id`, title, workspace, or cwd to select the target pane. If a tab has multiple panes, inspect all of them rather than guessing.
-
-Read before sending input:
-
-```bash
 wezterm.exe cli get-text --pane-id "$pane_id"
 ```
 
-Classify the pane first: shell prompt, running command, or full-screen application. Send shell commands only to a shell; send keystrokes to Neovim, tmux, fzf, and other TUIs.
+Use an observed pane ID, not a tab number. Explicit `--pane-id` avoids accidentally targeting the agent's pane via `WEZTERM_PANE`. Titles and cwd help locate a session; screen content identifies whether it is a shell, running command, or TUI. Recheck when the user may have repurposed the pane. Verify actual host/user before destructive operations.
 
-## Send input
-
-Use `--no-paste` for commands and keystrokes. Send ordinary text, control keys, and Enter as distinct operations when mode or command completion matters.
+`get-text` uses screen-relative lines: `0` is the current screen's first line; negative numbers address scrollback. With no range it returns the current screen. Omit `--end-line` to read through the screen bottom.
 
 ```bash
-printf '%s' 'printf READY' |
+# Recent history plus current screen
+wezterm.exe cli get-text --pane-id "$pane_id" --start-line -100
+# History only, excluding the current screen
+wezterm.exe cli get-text --pane-id "$pane_id" --start-line -200 --end-line -1
+```
+
+Use `--escapes` when color/style matters. Consult `wezterm.exe cli <command> --help` for installed-version behavior.
+
+## Send text and keys
+
+`send-text [TEXT]` accepts an argument or reads stdin. By default it uses bracketed paste **if the target application has enabled it**; `--no-paste` sends bytes directly.
+
+For shell commands, prefer default paste for text, then send Enter separately:
+
+```bash
+printf '%s' 'printf "%s\n" READY' |
+  wezterm.exe cli send-text --pane-id "$pane_id"
+printf '\r' |
   wezterm.exe cli send-text --pane-id "$pane_id" --no-paste
-printf '\n' |
-  wezterm.exe cli send-text --pane-id "$pane_id" --no-paste
-sleep 0.2
 wezterm.exe cli get-text --pane-id "$pane_id"
 ```
 
-For scrollback, add `--start-line -200 --end-line -1`. A successful CLI call only means WezTerm accepted the bytes; read the pane to confirm execution.
+Check for unfinished user input before sending. Do not append to or erase it unintentionally; coordinate or use another pane if the user is typing. Reading and sending are not atomic.
 
-Do not put a literal `\n` inside ordinary shell text and expect Enter; send an actual newline byte. Avoid combining recovery keys, commands, and editor input into one opaque payload.
+Use `--no-paste` for control keys and deliberate direct input. For example, `printf '\003'` sends Ctrl-C; use it only when interruption is intended. An actual control byte is different from literal text such as `\n`.
 
-For multiline shell input, use a quoted outer heredoc and pipe it directly to `send-text`; use a different delimiter for the command's inner heredoc:
+Multiline paste behavior depends on the application. Without bracketed paste, newlines may execute commands immediately. Prefer transferring a file for large scripts; stdin and quoted heredocs help avoid nested shell quoting. Separate mode changes, text, and submission when their ordering matters.
+
+CLI success confirms delivery, not execution. Read back the resulting output or application state.
+
+## Completion and long output
+
+Save verbose output to a log; inspect relevant excerpts rather than repeatedly capturing large scrollback ranges. For long commands, a fresh completion marker with exit status is more reliable than a fixed prompt:
 
 ```bash
-cat <<'SEND' | wezterm.exe cli send-text --pane-id "$pane_id" --no-paste
-cat > /tmp/example.txt <<'FILE'
-line one
-line two
-FILE
-SEND
+( if command_to_run; then rc=0; else rc=$?; fi; printf '\n__WZ_DONE_unique_token__=%s\n' "$rc"; exit "$rc" )
 ```
 
-Quote both delimiters, keep each terminator alone on its own line, and do not reuse the delimiter.
+Replace the token per run and look for the emitted standalone line, not the echoed command. For pipelines ending in `tee`, use Bash `set -o pipefail`. For multi-step jobs, invoke a script with its own error handling. Avoid tight polling; use completion notifications where available. If output scrolls away, inspect the log rather than rerunning the operation.
 
-## Full-screen applications
+## TUIs and recovery
 
-### Neovim
+- **Neovim:** confirm mode before sending keys. Prefer bracketed paste for text in a supported editing mode; for direct multiline insertion, `:set paste` / `:set nopaste` can avoid doubled indentation. Verify saving separately from visible buffer contents.
+- **tmux:** distinguish WezTerm's pane from the active tmux pane. Use tmux keys only in a confirmed tmux session; `tmux capture-pane -p -S -200` can retrieve its own scrollback.
+- **Unexpected state:** stop sending, read again, and recover with the smallest appropriate action. Do not automatically send Ctrl-C to an unknown foreground job.
 
-Treat input as editor keys and wait for the UI before typing. For multiline source, Neovim's autoindent can compound indentation. Use this sequence:
-
-1. Leave insert mode and run `:set paste`.
-2. Insert the complete source.
-3. Leave insert mode and run `:set nopaste`.
-4. Save and verify the file or run the requested command.
-
-Keep mode transitions separate enough to detect a missed state. `get-text` does not by itself prove that a buffer was saved.
-
-### tmux
-
-WezTerm and tmux are separate input layers. Use tmux's prefix only when the pane is visibly attached to tmux. For tmux scrollback, `tmux capture-pane -p -S -200` inside the session can be more reliable than WezTerm screen capture.
-
-## Spawn and recover
-
-`spawn` creates a tab and prints its new pane ID:
+## Spawn
 
 ```bash
-new_pane=$(wezterm.exe cli spawn -- bash -lc 'exec ssh server-a -t "tmux new-session -A -s project-1"')
+new_pane=$(wezterm.exe cli spawn -- bash -lc 'exec ssh server-a')
 wezterm.exe cli get-text --pane-id "$new_pane"
 ```
 
-Use `--new-window` only when a separate window is intended; use `--window-id` to select a destination window.
+`spawn` returns the new pane ID. Use `--window-id` to select a window, or `--new-window` when a separate window is desired. The new pane may show authentication or startup output rather than a ready shell.
 
-If input looks corrupted, stop, read the pane, send one Ctrl-C only if the state is recoverable, read again, and continue with the smallest next action. If a required CLI option is unavailable, report the installed version instead of silently using ambiguous input.
-
-## References
-
-- https://wezterm.org/cli/cli/index.html
-- https://wezterm.org/cli/cli/list.html
-- https://wezterm.org/cli/cli/get-text.html
-- https://wezterm.org/cli/cli/send-text.html
-- https://wezterm.org/cli/cli/spawn.html
-
+Reference: https://wezterm.org/cli/cli/index.html
