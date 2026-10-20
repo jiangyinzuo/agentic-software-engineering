@@ -3,7 +3,7 @@ import type {
   ExtensionContext,
   ExtensionCommandContext,
 } from "@oh-my-pi/pi-coding-agent";
-import { readdir } from "node:fs/promises";
+import { appendFile, mkdir, readdir } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import os from "node:os";
 
